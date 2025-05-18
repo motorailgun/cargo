@@ -1,0 +1,42 @@
+[src/cargo/ops/cargo_compile/mod.rs:127:5] options = CompileOptions {
+    build_config: BuildConfig {
+        requested_kinds: [
+            Host,
+        ],
+        jobs: 8,
+        keep_going: false,
+        requested_profile: "test",
+        mode: Test,
+        message_format: Human,
+        force_rebuild: false,
+        build_plan: false,
+        unit_graph: false,
+        dry_run: false,
+        primary_unit_rustc: None,
+        rustfix_diagnostic_server: RefCell {
+            value: None,
+        },
+        export_dir: None,
+        future_incompat_report: false,
+        timing_outputs: [],
+        sbom: false,
+    },
+    cli_features: CliFeatures {
+        features: {},
+        all_features: false,
+        uses_default_features: true,
+    },
+    spec: Packages(
+        [
+            "hickory-resolver",
+        ],
+    ),
+    filter: Default {
+        required_features_filterable: true,
+    },
+    target_rustdoc_args: None,
+    target_rustc_args: None,
+    target_rustc_crate_types: None,
+    rustdoc_document_private_items: false,
+    honor_rust_version: None,
+}

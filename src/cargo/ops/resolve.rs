@@ -145,11 +145,13 @@ pub fn resolve_ws_with_opts<'gctx>(
     force_all_targets: ForceAllTargets,
     dry_run: bool,
 ) -> CargoResult<WorkspaceResolve<'gctx>> {
+    tracing::warn!("let's go, here is resolve_ws_with_opts()");
     let specs = match ws.resolve_feature_unification() {
         FeatureUnification::Selected => specs,
         FeatureUnification::Workspace => &ops::Packages::All(Vec::new()).to_package_id_specs(ws)?,
     };
     let mut registry = ws.package_registry()?;
+    // this resolved_with_overrides is very sus
     let (resolve, resolved_with_overrides) = if ws.ignore_lock() {
         let add_patches = true;
         let resolve = None;
@@ -166,6 +168,7 @@ pub fn resolve_ws_with_opts<'gctx>(
         ops::print_lockfile_changes(ws, None, &resolved_with_overrides, &mut registry)?;
         (resolve, resolved_with_overrides)
     } else if ws.require_optional_deps() {
+        tracing::warn!("ws.require_optional_deps() == true");
         // First, resolve the root_package's *listed* dependencies, as well as
         // downloading and updating all remotes and such.
         let resolve = resolve_with_registry(ws, &mut registry, dry_run)?;
@@ -198,6 +201,8 @@ pub fn resolve_ws_with_opts<'gctx>(
             }
         }
 
+        // ok, this is very sus
+        tracing::warn!("calling resolve_with_previous()");
         let resolved_with_overrides = resolve_with_previous(
             &mut registry,
             ws,
@@ -208,6 +213,12 @@ pub fn resolve_ws_with_opts<'gctx>(
             specs,
             add_patches,
         )?;
+
+        // I mean, this is safe? 
+        // maybe there's some real bad code in Resolve::deps(packageid)
+        resolved_with_overrides.iter().for_each(|p| tracing::warn!("packageid: {p}"));
+
+        // this is the sussiest resolved_with_overrodes
         (Some(resolve), resolved_with_overrides)
     } else {
         let add_patches = true;
@@ -265,9 +276,11 @@ pub fn resolve_ws_with_opts<'gctx>(
         force_all_targets,
     )?;
 
+    tracing::warn!("returning very sus WorkspaceResolve");
     Ok(WorkspaceResolve {
         pkg_set,
         workspace_resolve: resolve,
+        // this targeted_resolve should include ipconfig
         targeted_resolve: resolved_with_overrides,
         resolved_features,
     })
@@ -350,6 +363,14 @@ pub fn resolve_with_previous<'gctx>(
 
     // In case any members were not already loaded or the Workspace is_ephemeral.
     for member in ws.members() {
+        // if member.name() == "hickory-resolver" {
+        //     let _span = tracing::span!(tracing::Level::WARN, "hicktory_resolver").entered();
+        //     for d in member.dependencies().iter() {
+        //         if d.package_name() == "ipconfig" {
+        //             tracing::warn!("{:?}", d);
+        //         }
+        //     }
+        // }
         registry.add_sources(Some(member.package_id().source_id()))?;
     }
 

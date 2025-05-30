@@ -708,6 +708,7 @@ Rustdoc did not scrape the following examples because they require dev-dependenc
         // targets are filtered, it is possible to have duplicate proposals for
         // the same thing.
         let mut units = HashSet::new();
+        dbg!(&proposals);
         for Proposal {
             pkg,
             target,
@@ -715,12 +716,23 @@ Rustdoc did not scrape the following examples because they require dev-dependenc
             mode,
         } in proposals
         {
+            tracing::warn!("target.required_features() = {:?}", &target.required_features());
+            // super::resolve_all_features(
+            //     // This somehow includes ipconfig
+            //     self.resolve,
+            //     self.resolved_features,
+            //     self.package_set,
+            //     pkg.package_id());
+
             let unavailable_features = match target.required_features() {
                 Some(rf) => {
                     self.validate_required_features(target.name(), rf, pkg.summary())?;
 
                     let features = features_map.entry(pkg).or_insert_with(|| {
+                        tracing::warn!("calling super::resolve_all_features");
+                        tracing::warn!("package_id: {:?}", &pkg.package_id());
                         super::resolve_all_features(
+                            // This somehow includes ipconfig
                             self.resolve,
                             self.resolved_features,
                             self.package_set,

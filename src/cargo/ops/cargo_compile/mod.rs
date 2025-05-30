@@ -152,12 +152,15 @@ pub fn compile_ws<'a>(
     options: &CompileOptions,
     exec: &Arc<dyn Executor>,
 ) -> CargoResult<Compilation<'a>> {
+    tracing::warn!("before unitinternet");
     let interner = UnitInterner::new();
+    tracing::warn!("before bcx");
     let bcx = create_bcx(ws, options, &interner)?;
     if options.build_config.unit_graph {
         unit_graph::emit_serialized_unit_graph(&bcx.roots, &bcx.unit_graph, ws.gctx())?;
         return Compilation::new(&bcx);
     }
+    tracing::warn!("before gc");
     crate::core::gc::auto_gc(bcx.gctx);
     let build_runner = BuildRunner::new(&bcx)?;
     if options.build_config.dry_run {
@@ -212,6 +215,7 @@ pub fn create_bcx<'a, 'gctx>(
     options: &'a CompileOptions,
     interner: &'a UnitInterner,
 ) -> CargoResult<BuildContext<'a, 'gctx>> {
+    tracing::warn!("very sus: create_bcx");
     let CompileOptions {
         ref build_config,
         ref spec,
@@ -273,6 +277,7 @@ pub fn create_bcx<'a, 'gctx>(
         }
     };
     let dry_run = false;
+    // ok, this is the root
     let resolve = ops::resolve_ws_with_opts(
         ws,
         &mut target_data,
@@ -283,9 +288,11 @@ pub fn create_bcx<'a, 'gctx>(
         crate::core::resolver::features::ForceAllTargets::No,
         dry_run,
     )?;
+    tracing::warn!("here is the sus resolve");
     let WorkspaceResolve {
         mut pkg_set,
         workspace_resolve,
+        // this resolve is **very** sus
         targeted_resolve: resolve,
         resolved_features,
     } = resolve;
@@ -371,6 +378,7 @@ pub fn create_bcx<'a, 'gctx>(
     // its own special handling of `CompileKind::Host`. It will
     // internally replace the host kind by the `explicit_host_kind`
     // before setting as a unit.
+    tracing::warn!("here goes new resolve");
     let generator = UnitGenerator {
         ws,
         packages: &to_builds,
@@ -380,6 +388,7 @@ pub fn create_bcx<'a, 'gctx>(
         requested_kinds: &build_config.requested_kinds,
         explicit_host_kind,
         mode: build_config.mode,
+        // sus resolve gets here
         resolve: &resolve,
         workspace_resolve: &workspace_resolve,
         resolved_features: &resolved_features,
@@ -938,6 +947,7 @@ pub fn resolve_all_features(
     package_set: &PackageSet<'_>,
     package_id: PackageId,
 ) -> HashSet<String> {
+    tracing::warn!("resolve_all_features");
     let mut features: HashSet<String> = resolved_features
         .activated_features(package_id, FeaturesFor::NormalOrDev)
         .iter()
@@ -946,11 +956,26 @@ pub fn resolve_all_features(
 
     // Include features enabled for use by dependencies so targets can also use them with the
     // required-features field when deciding whether to be built or skipped.
+    tracing::warn!("package_id: {package_id}");
     for (dep_id, deps) in resolve_with_overrides.deps(package_id) {
-        let is_proc_macro = package_set
-            .get_one(dep_id)
-            .expect("packages downloaded")
-            .proc_macro();
+        tracing::warn!("dep_id: {dep_id}");
+
+
+        // THIS MAGICALLY SOLVE THE PROBLEM
+
+        // if dep_id.name() == "ipconfig" {
+        //     continue;
+        // }
+
+        // SO, I MUST REMOVE ipconfig FROM resolve_with_overrides.deps("hackory-resolver")
+
+        let is_proc_macro = match package_set.get_one(dep_id) {
+            Ok(p) => p.proc_macro(),
+            Err(e) => {
+                tracing::warn!("failed to get package from PackageSet: {e}");
+                continue;
+            },
+        };
         for dep in deps {
             let features_for = FeaturesFor::from_for_host(is_proc_macro || dep.is_build());
             for feature in resolved_features

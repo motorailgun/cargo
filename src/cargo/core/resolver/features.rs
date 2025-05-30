@@ -633,12 +633,19 @@ impl<'a, 'gctx> FeatureResolver<'a, 'gctx> {
         fk: FeaturesFor,
         dep_name: InternedString,
     ) -> CargoResult<()> {
+        tracing::warn!("pkg_id: {}, dep_name: {}", &pkg_id, &dep_name);
         // Mark this dependency as activated.
         let save_decoupled = fk.apply_opts(&self.opts);
+        let dep = self.activated_dependencies.get(&(pkg_id, save_decoupled));
+        tracing::warn!("before insert = {:?}", dep);
+
         self.activated_dependencies
             .entry((pkg_id, save_decoupled))
             .or_default()
             .insert(dep_name);
+        let dep = self.activated_dependencies.get(&(pkg_id, save_decoupled)).unwrap();
+        tracing::warn!("after insert = {:?}", dep);
+
         // Check for any deferred features.
         let to_enable = self
             .deferred_weak_dependencies

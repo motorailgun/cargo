@@ -145,12 +145,15 @@ pub fn resolve_ws_with_opts<'gctx>(
     force_all_targets: ForceAllTargets,
     dry_run: bool,
 ) -> CargoResult<WorkspaceResolve<'gctx>> {
+    tracing::warn!("let's go, here is resolve_ws_with_opts()");
     let specs = match ws.resolve_feature_unification() {
         FeatureUnification::Selected => specs,
         FeatureUnification::Workspace => &ops::Packages::All(Vec::new()).to_package_id_specs(ws)?,
     };
     let mut registry = ws.package_registry()?;
+    // this resolved_with_overrides is very sus
     let (resolve, resolved_with_overrides) = if ws.ignore_lock() {
+        tracing::warn!("ws.ignore_lock() = true");
         let add_patches = true;
         let resolve = None;
         let resolved_with_overrides = resolve_with_previous(
@@ -166,11 +169,18 @@ pub fn resolve_ws_with_opts<'gctx>(
         ops::print_lockfile_changes(ws, None, &resolved_with_overrides, &mut registry)?;
         (resolve, resolved_with_overrides)
     } else if ws.require_optional_deps() {
+        tracing::warn!("ws.require_optional_deps() == true");
         // First, resolve the root_package's *listed* dependencies, as well as
         // downloading and updating all remotes and such.
+
+        // this ALREADY have ipconfig
+        // HOWEVER, not a direct cause of panic(still sus tho)
+        // becaues the panic happens on targeted_resolve (resolved_with_overrides)
         let resolve = resolve_with_registry(ws, &mut registry, dry_run)?;
         // No need to add patches again, `resolve_with_registry` has done it.
         let add_patches = false;
+        // let p = resolve.iter().filter(|p| p.name() == "hickory-resolver" ).collect::<Vec<_>>()[0];
+        // resolve.deps(p).for_each(|p| tracing::warn!("hickory-resolver dep packageid(before overrides): {}", p.0));
 
         // Second, resolve with precisely what we're doing. Filter out
         // transitive dependencies if necessary, specify features, handle
@@ -198,6 +208,9 @@ pub fn resolve_ws_with_opts<'gctx>(
             }
         }
 
+        // ok, this is very sus
+        // the direct cause of panic
+        tracing::warn!("calling resolve_with_previous()");
         let resolved_with_overrides = resolve_with_previous(
             &mut registry,
             ws,
@@ -208,8 +221,16 @@ pub fn resolve_ws_with_opts<'gctx>(
             specs,
             add_patches,
         )?;
+
+        // I mean, this is safe? 
+        // maybe there's some real bad code in Resolve::deps(packageid)
+        let p = resolved_with_overrides.iter().filter(|p| p.name() == "hickory-resolver").collect::<Vec<_>>()[0];
+        resolved_with_overrides.deps(p).for_each(|p| tracing::warn!("hickory-resolver dep packageid: {}", p.0));
+
+        // this is the sussiest resolved_with_overrodes
         (Some(resolve), resolved_with_overrides)
     } else {
+        tracing::warn!("ws.require_optional_deps() == false && ws.require_optional_deps() == false");
         let add_patches = true;
         let resolve = ops::load_pkg_lockfile(ws)?;
         let resolved_with_overrides = resolve_with_previous(
@@ -265,9 +286,11 @@ pub fn resolve_ws_with_opts<'gctx>(
         force_all_targets,
     )?;
 
+    tracing::warn!("returning very sus WorkspaceResolve");
     Ok(WorkspaceResolve {
         pkg_set,
         workspace_resolve: resolve,
+        // this targeted_resolve should include ipconfig
         targeted_resolve: resolved_with_overrides,
         resolved_features,
     })
@@ -350,6 +373,14 @@ pub fn resolve_with_previous<'gctx>(
 
     // In case any members were not already loaded or the Workspace is_ephemeral.
     for member in ws.members() {
+        // if member.name() == "hickory-resolver" {
+        //     let _span = tracing::span!(tracing::Level::WARN, "hicktory_resolver").entered();
+        //     for d in member.dependencies().iter() {
+        //         if d.package_name() == "ipconfig" {
+        //             tracing::warn!("{:?}", d);
+        //         }
+        //     }
+        // }
         registry.add_sources(Some(member.package_id().source_id()))?;
     }
 
@@ -411,6 +442,7 @@ pub fn resolve_with_previous<'gctx>(
         ws.members_with_features(specs, cli_features)?
             .into_iter()
             .map(|(member, features)| {
+                tracing::warn!("member name = {}", member.name());
                 let summary = registry.lock(member.summary().clone());
                 (
                     summary,

@@ -391,7 +391,7 @@ fn patch_to_git_pull_request() {
 [UPDATING] git repository `https://github.com/foo/bar/pull/123`
 [WARNING] spurious network error (3 tries remaining): unexpected http status code: 404; class=Http (34)
 [WARNING] spurious network error (2 tries remaining): unexpected http status code: 404; class=Http (34)
-[WARNING] spurious network error (1 tries remaining): unexpected http status code: 404; class=Http (34)
+[WARNING] spurious network error (1 try remaining): unexpected http status code: 404; class=Http (34)
 [ERROR] failed to load source for dependency `bar`
 
 Caused by:

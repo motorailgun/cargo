@@ -360,6 +360,14 @@ fn patch_to_git() {
 #[cargo_test]
 fn patch_to_git_pull_request() {
     Package::new("bar", "0.1.0").publish();
+    let traiter = if cargo_test_support::git::cargo_uses_gitoxide() {
+        r#"  An IO error occurred when talking to the server
+
+Caused by:
+  Received HTTP status 404"#
+    } else {
+        r#"  [..] status code: 404; class=Http (34)"#
+    };
 
     let p = project()
         .file(
@@ -386,12 +394,10 @@ fn patch_to_git_pull_request() {
 
     p.cargo("check -v")
         .with_status(101)
-        .with_stderr_data(str![[r#"
-[WARNING] dependency (bar) git url https://github.com/foo/bar/pull/123 is not a repository. The path looks like a pull request. Try replacing the dependency with: `git = "https://github.com/foo/bar.git" rev = "refs/pull/123/head"` in the dependency declaration.
+        .with_stderr_data(format!(
+r#"[WARNING] dependency (bar) git url https://github.com/foo/bar/pull/123 is not a repository. The path looks like a pull request. Try replacing the dependency with: `git = "https://github.com/foo/bar.git" rev = "refs/pull/123/head"` in the dependency declaration.
 [UPDATING] git repository `https://github.com/foo/bar/pull/123`
-[WARNING] spurious network error (3 tries remaining): unexpected http status code: 404; class=Http (34)
-[WARNING] spurious network error (2 tries remaining): unexpected http status code: 404; class=Http (34)
-[WARNING] spurious network error (1 tries remaining): unexpected http status code: 404; class=Http (34)
+...
 [ERROR] failed to load source for dependency `bar`
 
 Caused by:
@@ -406,9 +412,8 @@ Caused by:
   https://doc.rust-lang.org/cargo/reference/config.html#netgit-fetch-with-cli
 
 Caused by:
-  unexpected http status code: 404; class=Http (34)
-
-"#]])
+{traiter}
+"#))
         .run();
 }
 

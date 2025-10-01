@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::{self, Path, PathBuf};
 use std::sync::Arc;
 use std::{env, fs};
 
@@ -654,6 +654,11 @@ pub fn install(
     dry_run: bool,
     lockfile_path: Option<&Path>,
 ) -> CargoResult<()> {
+    // FIXME: If set, `root` here points direct to `install.root` in cargo's config,
+    //        thus `dst` just becomes a RELATIVE path from where `cargo install` is dispatched at.
+    //        This behavior is neither intended, nor follows the documentation, so
+    //        either this behavior or documantation must be corrected.
+    // see: #16023
     let root = resolve_root(root, gctx)?;
     let dst = root.join("bin").into_path_unlocked();
     let map = SourceConfigMap::new(gctx)?;
@@ -778,14 +783,19 @@ pub fn install(
         // Print a warning that if this directory isn't in PATH that they won't be
         // able to run these commands.
         let path = gctx.get_env_os("PATH").unwrap_or_default();
-        let dst_in_path = env::split_paths(&path).any(|path| path == dst);
 
-        if !dst_in_path {
-            gctx.shell().warn(&format!(
-                "be sure to add `{}` to your PATH to be \
-             able to run the installed binaries",
-                dst.display()
-            ))?;
+        // FIXME: folloing `path::absolute()` is an workaround for #16023, should be removed once fixed
+        // just ignore it if absolute path cannot be obtained
+        if let Ok(dst_absolute) = path::absolute(&dst) {
+            let dst_in_path = env::split_paths(&path).any(|path| path == dst_absolute);
+
+            if !dst_in_path {
+                gctx.shell().warn(&format!(
+                    "be sure to add `{}` to your PATH to be \
+                able to run the installed binaries",
+                    dst.display()
+                ))?;
+            }
         }
     }
 

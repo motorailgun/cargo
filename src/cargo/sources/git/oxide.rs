@@ -16,7 +16,7 @@ use tracing::debug;
 
 /// For the time being, `repo_path` makes it easy to instantiate a gitoxide repo just for fetching.
 /// In future this may change to be the gitoxide repository itself.
-pub fn with_retry_and_progress(
+pub fn with_retry_and_progress<'a>(
     repo_path: &std::path::Path,
     gctx: &GlobalContext,
     cb: &(
@@ -25,7 +25,7 @@ pub fn with_retry_and_progress(
         &AtomicBool,
         &mut gix::progress::tree::Item,
         &mut dyn FnMut(&gix::bstr::BStr),
-    ) -> Result<(), crate::sources::git::fetch::Error>
+    ) -> (Result<(), crate::sources::git::fetch::Error>, &'a str)
              + Send
              + Sync
      ),
@@ -46,7 +46,7 @@ pub fn with_retry_and_progress(
             let thread = s.spawn(move || {
                 let mut progress = progress_root.add_child("operation");
                 let mut urls = RefCell::new(Default::default());
-                let res = cb(
+                let (res, remote_url) = cb(
                     &repo_path,
                     &AtomicBool::default(),
                     &mut progress,
@@ -54,7 +54,7 @@ pub fn with_retry_and_progress(
                         *urls.borrow_mut() = Some(url.to_owned());
                     },
                 );
-                amend_authentication_hints(res, urls.get_mut().take())
+                amend_authentication_hints(res, remote_url, urls.get_mut().take())
             });
             translate_progress_to_bar(&mut progress_bar, root, is_shallow)?;
             thread.join().expect("no panic in scoped thread")
@@ -180,6 +180,7 @@ fn translate_progress_to_bar(
 
 fn amend_authentication_hints(
     res: Result<(), crate::sources::git::fetch::Error>,
+    remote_url: &str,
     last_url_for_authentication: Option<gix::bstr::BString>,
 ) -> CargoResult<()> {
     let Err(err) = res else { return Ok(()) };
@@ -189,6 +190,7 @@ fn amend_authentication_hints(
         ) => Some(err),
         _ => None,
     };
+
     if let Some(e) = e {
         let auth_message = match e {
             gix::protocol::handshake::Error::Credentials(_) => {
@@ -203,10 +205,14 @@ fn amend_authentication_hints(
                     .into()
             }
             gix::protocol::handshake::Error::Transport(_) => {
-                let msg = concat!(
-                    "network failure seems to have happened\n",
-                    "if a proxy or similar is necessary `net.git-fetch-with-cli` may help here\n",
-                    "https://doc.rust-lang.org/cargo/reference/config.html#netgit-fetch-with-cli"
+                let msg = format!(
+                    concat!(
+                        "network failure seems to have happened\n",
+                        "if a proxy or similar is necessary `net.git-fetch-with-cli` may help here\n",
+                        "https://doc.rust-lang.org/cargo/reference/config.html#netgit-fetch-with-cli",
+                        "{}"
+                    ),
+                    super::utils::note_github_pull_request(remote_url).unwrap_or_default()
                 );
                 return Err(anyhow::Error::from(err).context(msg));
             }

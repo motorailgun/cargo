@@ -395,8 +395,7 @@ Caused by:
     p.cargo("check -v")
         .with_status(101)
         .with_stderr_data(format!(
-r#"[WARNING] dependency (bar) git url https://github.com/foo/bar/pull/123 is not a repository. The path looks like a pull request. Try replacing the dependency with: `git = "https://github.com/foo/bar.git" rev = "refs/pull/123/head"` in the dependency declaration.
-[UPDATING] git repository `https://github.com/foo/bar/pull/123`
+            r#"[UPDATING] git repository `https://github.com/foo/bar/pull/123`
 ...
 [ERROR] failed to load source for dependency `bar`
 
@@ -411,9 +410,15 @@ Caused by:
   if a proxy or similar is necessary `net.git-fetch-with-cli` may help here
   https://doc.rust-lang.org/cargo/reference/config.html#netgit-fetch-with-cli
 
+  [NOTE] GitHub url https://github.com/foo/bar/pull/123 is not a repository. 
+     Replace the dependency with 
+         `git = "https://github.com/foo/bar.git" rev = "refs/pull/123/head"` 
+     to specify pull requests as dependencies' revision.
+
 Caused by:
 {traiter}
-"#))
+"#
+        ))
         .run();
 }
 

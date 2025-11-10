@@ -1144,6 +1144,7 @@ fn fetch_with_gitoxide(
     let res = oxide::with_retry_and_progress(
         git2_repo.path(),
         gctx,
+        remote_url,
         &|repo_path,
           should_interrupt,
           mut progress,
@@ -1227,9 +1228,9 @@ fn fetch_with_gitoxide(
                     }
                 }
 
-                return (Err(err.into()), &remote_url);
+                return Err(err.into());
             }
-            (Ok(()), remote_url)
+            Ok(())
         },
     );
     if repo_reinitialized.load(Ordering::Relaxed) {

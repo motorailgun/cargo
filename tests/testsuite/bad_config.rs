@@ -2292,7 +2292,7 @@ Caused by:
   Unable to update https://github.com/foo/bar/pull/123
 ...
   [NOTE] GitHub url https://github.com/foo/bar/pull/123 is not a repository. 
-     Replace the dependency with 
+  [HELP] Replace the dependency with 
          `git = "https://github.com/foo/bar.git" rev = "refs/pull/123/head"` 
      to specify pull requests as dependencies' revision.
 ...

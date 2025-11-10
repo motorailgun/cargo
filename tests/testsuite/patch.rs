@@ -360,14 +360,6 @@ fn patch_to_git() {
 #[cargo_test]
 fn patch_to_git_pull_request() {
     Package::new("bar", "0.1.0").publish();
-    let traiter = if cargo_test_support::git::cargo_uses_gitoxide() {
-        r#"  An IO error occurred when talking to the server
-
-Caused by:
-  Received HTTP status 404"#
-    } else {
-        r#"  [..] status code: 404; class=Http (34)"#
-    };
 
     let p = project()
         .file(
@@ -411,12 +403,12 @@ Caused by:
   https://doc.rust-lang.org/cargo/reference/config.html#netgit-fetch-with-cli
 
   [NOTE] GitHub url https://github.com/foo/bar/pull/123 is not a repository. 
-     Replace the dependency with 
+  [HELP] Replace the dependency with 
          `git = "https://github.com/foo/bar.git" rev = "refs/pull/123/head"` 
      to specify pull requests as dependencies' revision.
 
 Caused by:
-{traiter}
+...
 "#
         ))
         .run();

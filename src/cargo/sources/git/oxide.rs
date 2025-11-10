@@ -19,13 +19,14 @@ use tracing::debug;
 pub fn with_retry_and_progress<'a>(
     repo_path: &std::path::Path,
     gctx: &GlobalContext,
+    repo_remote_url: &str,
     cb: &(
          dyn Fn(
         &std::path::Path,
         &AtomicBool,
         &mut gix::progress::tree::Item,
         &mut dyn FnMut(&gix::bstr::BStr),
-    ) -> (Result<(), crate::sources::git::fetch::Error>, &'a str)
+    ) -> Result<(), crate::sources::git::fetch::Error>
              + Send
              + Sync
      ),
@@ -46,7 +47,7 @@ pub fn with_retry_and_progress<'a>(
             let thread = s.spawn(move || {
                 let mut progress = progress_root.add_child("operation");
                 let mut urls = RefCell::new(Default::default());
-                let (res, remote_url) = cb(
+                let res = cb(
                     &repo_path,
                     &AtomicBool::default(),
                     &mut progress,
@@ -54,7 +55,7 @@ pub fn with_retry_and_progress<'a>(
                         *urls.borrow_mut() = Some(url.to_owned());
                     },
                 );
-                amend_authentication_hints(res, remote_url, urls.get_mut().take())
+                amend_authentication_hints(res, repo_remote_url, urls.get_mut().take())
             });
             translate_progress_to_bar(&mut progress_bar, root, is_shallow)?;
             thread.join().expect("no panic in scoped thread")

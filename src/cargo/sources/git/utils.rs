@@ -1606,7 +1606,7 @@ pub(crate) fn note_github_pull_request(url: &str) -> Option<String> {
             return Some(format!(
                 concat!(
                     "\n\nnote: GitHub url {} is not a repository. \n",
-                    "   Replace the dependency with \n",
+                    "help: Replace the dependency with \n",
                     "       `git = \"{}\" rev = \"{}\"` \n",
                     "   to specify pull requests as dependencies' revision."
                 ),

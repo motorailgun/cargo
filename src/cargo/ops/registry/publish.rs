@@ -797,28 +797,43 @@ fn package_list(pkgs: impl IntoIterator<Item = PackageId>, final_sep: &str) -> S
 
 fn resolve_registry_or_index(
     opts: &PublishOpts<'_>,
-    just_pkgs: &[&Package],
+    pkgs: &[&Package],
 ) -> CargoResult<Option<RegistryOrIndex>> {
-    Ok(match opts.reg_or_index.clone() {
-        Some(r) => {
-            validate_registry(&just_pkgs, Some(&r))?;
-            Some(r)
-        }
-        None => {
-            let reg = super::infer_registry(&just_pkgs)?;
-            validate_registry(&just_pkgs, reg.as_ref())?;
-            if let Some(RegistryOrIndex::Registry(registry)) = &reg {
-                if registry != CRATES_IO_REGISTRY {
-                    // Don't warn for crates.io.
-                    opts.gctx.shell().note(&format!(
-                        "found `{}` as only allowed registry. Publishing to it automatically.",
-                        registry
-                    ))?;
-                }
+    let opt_index_or_registry = opts.reg_or_index.clone();
+    let registry_is_specified_by_any_package = pkgs
+        .iter()
+        .any(|pkg| pkg.publish().as_ref().map(|v| v.len()).unwrap_or(0) > 0);
+
+    let res = match opt_index_or_registry {
+        ref r@ Some(ref registry_or_index) => {
+            validate_registry(pkgs, r.as_ref())?;
+
+            if registry_is_specified_by_any_package && registry_or_index.is_index() {
+                opts.gctx.shell().warn(r#"`--index` will ignore registries set by `package.publish` in Cargo.toml, and may cause unexpected push to prohibited registry
+help: use `--registry` instead or set `publish = true` in Cargo.toml to suppress this warning"#)?;
             }
-            reg
-        }
-    })
+
+            r.clone()
+        },
+        None => {
+            let registry_or_index = super::infer_registry(pkgs)?;
+            validate_registry(pkgs, registry_or_index.as_ref())?;
+
+            if let Some(RegistryOrIndex::Registry(ref registry)) = registry_or_index
+                && registry != CRATES_IO_REGISTRY
+            {
+                // Don't warn for crates.io.
+                opts.gctx.shell().note(&format!(
+                    "found `{}` as only allowed registry. Publishing to it automatically.",
+                    registry
+                ))?;
+            }
+
+            registry_or_index
+        },
+    };
+
+    Ok(res)
 }
 
 fn validate_registry(pkgs: &[&Package], reg_or_index: Option<&RegistryOrIndex>) -> CargoResult<()> {

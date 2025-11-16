@@ -1015,7 +1015,7 @@ fn publish_when_both_publish_and_index_specified() {
         .arg("--token")
         .arg(registry.token())
         .with_stderr_data(str![[r#"
-[WARNING] `cargo publish --token` is deprecated in favor of using `cargo login` and environment variables
+...
 [UPDATING] [..] index
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 5 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
@@ -1066,6 +1066,7 @@ fn publish_failed_with_index_and_only_allowed_registry() {
         .arg(registry.index_url().as_str())
         .with_status(101)
         .with_stderr_data(str![[r#"
+...
 [ERROR] command-line argument --index requires --token to be specified
 
 "#]])

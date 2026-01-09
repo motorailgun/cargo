@@ -68,7 +68,7 @@ pub fn report_timings(
         return Err(AlreadyPrintedError::new(anyhow::anyhow!("")).into());
     };
 
-    let ctx = prepare_context(&log, &run_id)
+    let ctx = prepare_context(LogProvider::Path(&log), &run_id)
         .with_context(|| format!("failed to analyze log at `{}`", log.display()))?;
 
     // If we are in a workspace,
@@ -110,8 +110,13 @@ pub fn report_timings(
     Ok(())
 }
 
-fn prepare_context(log: &Path, run_id: &RunId) -> CargoResult<RenderContext<'static>> {
-    let reader = BufReader::new(File::open(&log)?);
+pub enum LogProvider<'a> {
+    Path(&'a Path),
+    Vec(Vec<LogMessage>),
+}
+
+pub(crate) fn prepare_context<'a>(log: LogProvider<'a>, run_id: &RunId) -> CargoResult<RenderContext<'static>> {
+    // let reader = BufReader::new(File::open(&log)?);
 
     let mut ctx = RenderContext {
         start_str: run_id.timestamp().to_string(),
@@ -135,9 +140,20 @@ fn prepare_context(log: &Path, run_id: &RunId) -> CargoResult<RenderContext<'sta
 
     let mut requested_units: HashSet<UnitIndex> = HashSet::new();
 
-    for (log_index, result) in serde_json::Deserializer::from_reader(reader)
-        .into_iter::<LogMessage>()
-        .enumerate()
+    // little bit messy for log provider to be pluggable until `cargo build --timings` support to be dropped
+    // FIXME: simplify once it's gone
+    let iterator: Box<dyn std::iter::Iterator<Item = Result<LogMessage, _>>> = match log {
+        LogProvider::Path(path) => {
+            let reader = BufReader::new(File::open(&path)?);
+            Box::new(serde_json::Deserializer::from_reader(reader)
+                .into_iter::<LogMessage>())
+        },
+        LogProvider::Vec(array) => {
+            Box::new(array.into_iter().map(|item| Ok(item)))
+        }
+    };
+
+    for (log_index, result) in iterator.enumerate()
     {
         let msg = match result {
             Ok(msg) => msg,

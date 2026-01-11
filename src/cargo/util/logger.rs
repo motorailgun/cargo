@@ -4,8 +4,8 @@ use std::hash::Hash;
 use std::io::{BufWriter, Write};
 use std::mem::ManuallyDrop;
 use std::path::Path;
-use std::sync::{Mutex, mpsc};
 use std::sync::mpsc::Sender;
+use std::sync::{Mutex, mpsc};
 use std::thread::JoinHandle;
 
 use anyhow::Context as _;
@@ -51,9 +51,10 @@ impl FileLogger {
                 });
 
                 Ok(Some(Self {
-                    tx: ManuallyDrop::new(tx), handle: Some(handle),
+                    tx: ManuallyDrop::new(tx),
+                    handle: Some(handle),
                 }))
-            },
+            }
             (Some(_), false) => {
                 ws.gctx().shell().warn(
                     "ignoring 'build.analysis' config, pass `-Zbuild-analysis` to enable it",
@@ -89,7 +90,7 @@ impl InMemoryLogger {
     fn new(options: &BuildConfig) -> Option<Self> {
         if options.timing_report {
             Some(Self {
-                logs: Mutex::new(Vec::new())
+                logs: Mutex::new(Vec::new()),
             })
         } else {
             None
@@ -146,7 +147,9 @@ impl BuildLogger {
     }
 
     pub fn get_logs(&self) -> Option<Vec<LogMessage>> {
-        self.in_memory_logger.as_ref().map(|l| l.logs.lock().expect("in-memory logger is poisoned").clone())
+        self.in_memory_logger
+            .as_ref()
+            .map(|l| l.logs.lock().expect("in-memory logger is poisoned").clone())
     }
 }
 

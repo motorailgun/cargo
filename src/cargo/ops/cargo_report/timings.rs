@@ -78,15 +78,14 @@ pub fn report_timings(
     };
 
     let reader = BufReader::new(File::open(&log)?);
-    let iter = serde_json::Deserializer::from_reader(reader).into_iter::<LogMessage>()
+    let iter = serde_json::Deserializer::from_reader(reader)
+        .into_iter::<LogMessage>()
         .enumerate()
-        .filter_map(|(idx, msg)|{
-            match msg {
-                Ok(msg) => Some(msg),
-                Err(e) => {
-                    tracing::warn!("failed to parse log message at index {idx}: {e}");
-                    None
-                }
+        .filter_map(|(idx, msg)| match msg {
+            Ok(msg) => Some(msg),
+            Err(e) => {
+                tracing::warn!("failed to parse log message at index {idx}: {e}");
+                None
             }
         });
     let ctx = prepare_context_from_iter(iter, &run_id)
@@ -132,7 +131,10 @@ pub fn report_timings(
 }
 
 // FIXME: simply the types here once `cargo build --timings` support is dropped
-pub(crate) fn prepare_context_from_iter<T: Iterator<Item = LogMessage>>(log: T, run_id: &RunId) -> CargoResult<RenderContext<'static>> {
+pub(crate) fn prepare_context_from_iter<T: Iterator<Item = LogMessage>>(
+    log: T,
+    run_id: &RunId,
+) -> CargoResult<RenderContext<'static>> {
     let mut ctx = RenderContext {
         start_str: run_id.timestamp().to_string(),
         root_units: Default::default(),

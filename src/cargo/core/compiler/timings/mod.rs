@@ -12,6 +12,7 @@ use crate::core::PackageId;
 use crate::core::compiler::BuildContext;
 use crate::core::compiler::BuildRunner;
 use crate::core::compiler::job_queue::JobId;
+use crate::ops::cargo_report::timings::prepare_context_from_iter;
 use crate::util::cpu::State;
 use crate::util::log_message::LogMessage;
 use crate::util::style;
@@ -121,7 +122,7 @@ impl<'gctx> Timings<'gctx> {
     pub fn new(bcx: &BuildContext<'_, 'gctx>, root_units: &[Unit]) -> Timings<'gctx> {
         let start = bcx.gctx.creation_time();
         let report_html = bcx.build_config.timing_report;
-        let enabled = report_html | bcx.logger.is_some();
+        let enabled = bcx.logger.is_enabled();
 
         if !enabled {
             return Timings {
@@ -221,12 +222,10 @@ impl<'gctx> Timings<'gctx> {
             unblocked_rmeta_units: Vec::new(),
             sections: Default::default(),
         };
-        if let Some(logger) = build_runner.bcx.logger {
-            logger.log(LogMessage::UnitStarted {
-                index: self.unit_to_index[&unit_time.unit],
-                elapsed: start,
-            });
-        }
+        build_runner.bcx.logger.log(LogMessage::UnitStarted {
+            index: self.unit_to_index[&unit_time.unit],
+            elapsed: start,
+        });
         assert!(self.active.insert(id, unit_time).is_none());
     }
 
@@ -253,14 +252,12 @@ impl<'gctx> Timings<'gctx> {
             .unblocked_rmeta_units
             .extend(unblocked.iter().cloned().cloned());
 
-        if let Some(logger) = build_runner.bcx.logger {
-            let unblocked = unblocked.iter().map(|u| self.unit_to_index[u]).collect();
-            logger.log(LogMessage::UnitRmetaFinished {
-                index: self.unit_to_index[&unit_time.unit],
-                elapsed,
-                unblocked,
-            });
-        }
+        let unblocked = unblocked.iter().map(|u| self.unit_to_index[u]).collect();
+        build_runner.bcx.logger.log(LogMessage::UnitRmetaFinished {
+            index: self.unit_to_index[&unit_time.unit],
+            elapsed,
+            unblocked,
+        });
     }
 
     /// Mark that a unit has finished running.
@@ -284,14 +281,12 @@ impl<'gctx> Timings<'gctx> {
             .unblocked_units
             .extend(unblocked.iter().cloned().cloned());
 
-        if let Some(logger) = build_runner.bcx.logger {
-            let unblocked = unblocked.iter().map(|u| self.unit_to_index[u]).collect();
-            logger.log(LogMessage::UnitFinished {
-                index: self.unit_to_index[&unit_time.unit],
-                elapsed,
-                unblocked,
-            });
-        }
+        let unblocked = unblocked.iter().map(|u| self.unit_to_index[u]).collect();
+        build_runner.bcx.logger.log(LogMessage::UnitFinished {
+            index: self.unit_to_index[&unit_time.unit],
+            elapsed,
+            unblocked,
+        });
         self.unit_times.push(unit_time);
     }
 
@@ -319,22 +314,20 @@ impl<'gctx> Timings<'gctx> {
             }
         }
 
-        if let Some(logger) = build_runner.bcx.logger {
-            let index = self.unit_to_index[&unit_time.unit];
-            let section = section_timing.name.clone();
-            logger.log(match section_timing.event {
-                SectionTimingEvent::Start => LogMessage::UnitSectionStarted {
-                    index,
-                    elapsed,
-                    section,
-                },
-                SectionTimingEvent::End => LogMessage::UnitSectionFinished {
-                    index,
-                    elapsed,
-                    section,
-                },
-            })
-        }
+        let index = self.unit_to_index[&unit_time.unit];
+        let section = section_timing.name.clone();
+        build_runner.bcx.logger.log(match section_timing.event {
+            SectionTimingEvent::Start => LogMessage::UnitSectionStarted {
+                index,
+                elapsed,
+                section,
+            },
+            SectionTimingEvent::End => LogMessage::UnitSectionFinished {
+                index,
+                elapsed,
+                section,
+            },
+        })
     }
 
     /// Mark that a fresh unit was encountered. (No re-compile needed)
@@ -385,7 +378,8 @@ impl<'gctx> Timings<'gctx> {
         }
         self.unit_times
             .sort_unstable_by(|a, b| a.start.partial_cmp(&b.start).unwrap());
-        if self.report_html {
+
+        if let Some(logs) = build_runner.bcx.logger.get_logs() {
             let timestamp = self.start_str.replace(&['-', ':'][..], "");
             let timings_path = build_runner
                 .files()
@@ -416,22 +410,8 @@ impl<'gctx> Timings<'gctx> {
             let unit_data = report::to_unit_data(&self.unit_times, &self.unit_to_index);
             let concurrency = report::compute_concurrency(&unit_data);
 
-            let ctx = report::RenderContext {
-                start_str: self.start_str.clone(),
-                root_units: self.root_targets.clone(),
-                profile: self.profile.clone(),
-                total_fresh: self.total_fresh,
-                total_dirty: self.total_dirty,
-                unit_data,
-                concurrency,
-                cpu_usage: &self.cpu_usage,
-                rustc_version: rustc_version.into(),
-                host: build_runner.bcx.rustc().host.to_string(),
-                requested_targets,
-                jobs: build_runner.bcx.jobs(),
-                num_cpus,
-                error,
-            };
+            let run_id = build_runner.bcx.logger.run_id();
+            let ctx = prepare_context_from_iter(logs.into_iter(), run_id)?;
             report::write_html(ctx, &mut f)?;
 
             let unstamped_filename = timings_path.join("cargo-timing.html");

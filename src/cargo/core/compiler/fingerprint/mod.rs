@@ -470,23 +470,21 @@ pub fn prepare_target(
         FingerprintComparison::Dirty { reason } => Some(reason),
     };
 
-    if let Some(logger) = bcx.logger {
-        let index = bcx.unit_to_index[unit];
-        let mut cause = None;
-        let status = match dirty_reason.as_ref() {
-            Some(reason) if reason.is_fresh_build() => util::log_message::FingerprintStatus::New,
-            Some(reason) => {
-                cause = Some(reason.clone());
-                util::log_message::FingerprintStatus::Dirty
-            }
-            None => util::log_message::FingerprintStatus::Fresh,
-        };
-        logger.log(LogMessage::UnitFingerprint {
-            index,
-            status,
-            cause,
-        });
-    }
+    let index = bcx.unit_to_index[unit];
+    let mut cause = None;
+    let status = match dirty_reason.as_ref() {
+        Some(reason) if reason.is_fresh_build() => util::log_message::FingerprintStatus::New,
+        Some(reason) => {
+            cause = Some(reason.clone());
+            util::log_message::FingerprintStatus::Dirty
+        }
+        None => util::log_message::FingerprintStatus::Fresh,
+    };
+    bcx.logger.log(LogMessage::UnitFingerprint {
+        index,
+        status,
+        cause,
+    });
 
     let Some(dirty_reason) = dirty_reason else {
         return Ok(Job::new_fresh());

@@ -160,27 +160,25 @@ pub fn compile_ws<'a>(
     exec: &Arc<dyn Executor>,
 ) -> CargoResult<Compilation<'a>> {
     let interner = UnitInterner::new();
-    let logger = BuildLogger::maybe_new(ws)?;
+    let logger = BuildLogger::new(ws, &options.build_config)?;
 
-    if let Some(ref logger) = logger {
-        let rustc = ws.gctx().load_global_rustc(Some(ws))?;
-        let num_cpus = std::thread::available_parallelism()
-            .ok()
-            .map(|x| x.get() as u64);
-        logger.log(LogMessage::BuildStarted {
-            cwd: ws.gctx().cwd().to_path_buf(),
-            host: rustc.host.to_string(),
-            jobs: options.build_config.jobs,
-            num_cpus,
-            profile: options.build_config.requested_profile.to_string(),
-            rustc_version: rustc.version.to_string(),
-            rustc_version_verbose: rustc.verbose_version.clone(),
-            target_dir: ws.target_dir().as_path_unlocked().to_path_buf(),
-            workspace_root: ws.root().to_path_buf(),
-        });
-    }
+    let rustc = ws.gctx().load_global_rustc(Some(ws))?;
+    let num_cpus = std::thread::available_parallelism()
+        .ok()
+        .map(|x| x.get() as u64);
+    logger.log(LogMessage::BuildStarted {
+        cwd: ws.gctx().cwd().to_path_buf(),
+        host: rustc.host.to_string(),
+        jobs: options.build_config.jobs,
+        num_cpus,
+        profile: options.build_config.requested_profile.to_string(),
+        rustc_version: rustc.version.to_string(),
+        rustc_version_verbose: rustc.verbose_version.clone(),
+        target_dir: ws.target_dir().as_path_unlocked().to_path_buf(),
+        workspace_root: ws.root().to_path_buf(),
+    });
 
-    let bcx = create_bcx(ws, options, &interner, logger.as_ref())?;
+    let bcx = create_bcx(ws, options, &interner, &logger)?;
 
     if options.build_config.unit_graph {
         unit_graph::emit_serialized_unit_graph(&bcx.roots, &bcx.unit_graph, ws.gctx())?;
@@ -239,7 +237,7 @@ pub fn create_bcx<'a, 'gctx>(
     ws: &'a Workspace<'gctx>,
     options: &'a CompileOptions,
     interner: &'a UnitInterner,
-    logger: Option<&'a BuildLogger>,
+    logger: &'a BuildLogger,
 ) -> CargoResult<BuildContext<'a, 'gctx>> {
     let CompileOptions {
         ref build_config,
@@ -307,10 +305,8 @@ pub fn create_bcx<'a, 'gctx>(
     };
     let dry_run = false;
 
-    if let Some(logger) = logger {
-        let elapsed = ws.gctx().creation_time().elapsed().as_secs_f64();
-        logger.log(LogMessage::ResolutionStarted { elapsed });
-    }
+    let elapsed = ws.gctx().creation_time().elapsed().as_secs_f64();
+    logger.log(LogMessage::ResolutionStarted { elapsed });
     let resolve = ops::resolve_ws_with_opts(
         ws,
         &mut target_data,
@@ -328,10 +324,8 @@ pub fn create_bcx<'a, 'gctx>(
         specs_and_features,
     } = resolve;
 
-    if let Some(logger) = logger {
-        let elapsed = ws.gctx().creation_time().elapsed().as_secs_f64();
-        logger.log(LogMessage::ResolutionFinished { elapsed });
-    }
+    let elapsed = ws.gctx().creation_time().elapsed().as_secs_f64();
+    logger.log(LogMessage::ResolutionFinished { elapsed });
 
     let std_resolve_features = if let Some(crates) = &gctx.cli_unstable().build_std {
         let (std_package_set, std_resolve, std_features) = standard_lib::resolve_std(
@@ -413,10 +407,8 @@ pub fn create_bcx<'a, 'gctx>(
     let mut unit_graph = HashMap::new();
     let mut scrape_units = Vec::new();
 
-    if let Some(logger) = logger {
-        let elapsed = ws.gctx().creation_time().elapsed().as_secs_f64();
-        logger.log(LogMessage::UnitGraphStarted { elapsed });
-    }
+    let elapsed = ws.gctx().creation_time().elapsed().as_secs_f64();
+    logger.log(LogMessage::UnitGraphStarted { elapsed });
 
     for SpecsAndResolvedFeatures {
         specs,
@@ -530,38 +522,36 @@ pub fn create_bcx<'a, 'gctx>(
         .enumerate()
         .map(|(i, &unit)| (unit.clone(), UnitIndex(i as u64)))
         .collect();
-    if let Some(logger) = logger {
-        let root_unit_indexes: HashSet<_> =
-            root_units.iter().map(|unit| unit_to_index[&unit]).collect();
+    let root_unit_indexes: HashSet<_> =
+        root_units.iter().map(|unit| unit_to_index[&unit]).collect();
 
-        for (index, unit) in units.into_iter().enumerate() {
-            let index = UnitIndex(index as u64);
-            let dependencies = unit_graph
-                .get(unit)
-                .map(|deps| {
-                    deps.iter()
-                        .filter_map(|dep| unit_to_index.get(&dep.unit).copied())
-                        .collect()
-                })
-                .unwrap_or_default();
-            logger.log(LogMessage::UnitRegistered {
-                package_id: unit.pkg.package_id().to_spec(),
-                target: (&unit.target).into(),
-                mode: unit.mode,
-                platform: target_data.short_name(&unit.kind).to_owned(),
-                index,
-                features: unit
-                    .features
-                    .iter()
-                    .map(|s| s.as_str().to_owned())
-                    .collect(),
-                requested: root_unit_indexes.contains(&index),
-                dependencies,
-            });
-        }
-        let elapsed = ws.gctx().creation_time().elapsed().as_secs_f64();
-        logger.log(LogMessage::UnitGraphFinished { elapsed });
+    for (index, unit) in units.into_iter().enumerate() {
+        let index = UnitIndex(index as u64);
+        let dependencies = unit_graph
+            .get(unit)
+            .map(|deps| {
+                deps.iter()
+                    .filter_map(|dep| unit_to_index.get(&dep.unit).copied())
+                    .collect()
+            })
+            .unwrap_or_default();
+        logger.log(LogMessage::UnitRegistered {
+            package_id: unit.pkg.package_id().to_spec(),
+            target: (&unit.target).into(),
+            mode: unit.mode,
+            platform: target_data.short_name(&unit.kind).to_owned(),
+            index,
+            features: unit
+                .features
+                .iter()
+                .map(|s| s.as_str().to_owned())
+                .collect(),
+            requested: root_unit_indexes.contains(&index),
+            dependencies,
+        });
     }
+    let elapsed = ws.gctx().creation_time().elapsed().as_secs_f64();
+    logger.log(LogMessage::UnitGraphFinished { elapsed });
 
     let mut extra_compiler_args = HashMap::new();
     if let Some(args) = extra_args {

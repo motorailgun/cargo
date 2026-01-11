@@ -3,7 +3,6 @@
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufReader;
-use std::path::Path;
 use std::path::PathBuf;
 
 use annotate_snippets::Level;

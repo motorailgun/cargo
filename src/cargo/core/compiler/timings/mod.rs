@@ -36,18 +36,12 @@ pub struct Timings<'gctx> {
     gctx: &'gctx GlobalContext,
     /// Whether or not timings should be captured.
     enabled: bool,
-    /// If true, saves an HTML report to disk.
-    report_html: bool,
     /// When Cargo started.
     start: Instant,
     /// A rendered string of when compilation started.
     start_str: String,
     /// A summary of the root units.
     ///
-    /// Tuples of `(package_description, target_descriptions)`.
-    root_targets: Vec<(String, Vec<String>)>,
-    /// The build profile.
-    profile: String,
     /// Total number of fresh units.
     total_fresh: u32,
     /// Total number of dirty units.
@@ -80,8 +74,6 @@ pub struct CompilationSection {
 /// Tracking information for an individual unit.
 struct UnitTime {
     unit: Unit,
-    /// A string describing the cargo target.
-    target: String,
     /// The time when this unit started as an offset in seconds from `Timings::start`.
     start: f64,
     /// Total time to build this unit in seconds.
@@ -121,18 +113,14 @@ pub struct UnitData {
 impl<'gctx> Timings<'gctx> {
     pub fn new(bcx: &BuildContext<'_, 'gctx>, root_units: &[Unit]) -> Timings<'gctx> {
         let start = bcx.gctx.creation_time();
-        let report_html = bcx.build_config.timing_report;
         let enabled = bcx.logger.is_enabled();
 
         if !enabled {
             return Timings {
                 gctx: bcx.gctx,
                 enabled,
-                report_html,
                 start,
                 start_str: String::new(),
-                root_targets: Vec::new(),
-                profile: String::new(),
                 total_fresh: 0,
                 total_dirty: 0,
                 unit_to_index: HashMap::new(),
@@ -152,15 +140,7 @@ impl<'gctx> Timings<'gctx> {
                 .or_default()
                 .push(target_desc);
         }
-        let root_targets = root_map
-            .into_iter()
-            .map(|(pkg_id, targets)| {
-                let pkg_desc = format!("{} {}", pkg_id.name(), pkg_id.version());
-                (pkg_desc, targets)
-            })
-            .collect();
         let start_str = jiff::Timestamp::now().to_string();
-        let profile = bcx.build_config.requested_profile.to_string();
         let last_cpu_state = match State::current() {
             Ok(state) => Some(state),
             Err(e) => {
@@ -172,11 +152,8 @@ impl<'gctx> Timings<'gctx> {
         Timings {
             gctx: bcx.gctx,
             enabled,
-            report_html,
             start,
             start_str,
-            root_targets,
-            profile,
             total_fresh: 0,
             total_dirty: 0,
             unit_to_index: bcx.unit_to_index.clone(),
@@ -214,7 +191,6 @@ impl<'gctx> Timings<'gctx> {
         let start = self.start.elapsed().as_secs_f64();
         let unit_time = UnitTime {
             unit,
-            target,
             start,
             duration: 0.0,
             rmeta_time: None,
@@ -371,14 +347,7 @@ impl<'gctx> Timings<'gctx> {
     pub fn finished(
         &mut self,
         build_runner: &BuildRunner<'_, '_>,
-        error: &Option<anyhow::Error>,
     ) -> CargoResult<()> {
-        if !self.enabled {
-            return Ok(());
-        }
-        self.unit_times
-            .sort_unstable_by(|a, b| a.start.partial_cmp(&b.start).unwrap());
-
         if let Some(logs) = build_runner.bcx.logger.get_logs() {
             let timestamp = self.start_str.replace(&['-', ':'][..], "");
             let timings_path = build_runner
@@ -388,27 +357,6 @@ impl<'gctx> Timings<'gctx> {
             paths::create_dir_all(&timings_path)?;
             let filename = timings_path.join(format!("cargo-timing-{}.html", timestamp));
             let mut f = BufWriter::new(paths::create(&filename)?);
-
-            let rustc_version = build_runner
-                .bcx
-                .rustc()
-                .verbose_version
-                .lines()
-                .next()
-                .expect("rustc version");
-            let requested_targets = build_runner
-                .bcx
-                .build_config
-                .requested_kinds
-                .iter()
-                .map(|kind| build_runner.bcx.target_data.short_name(kind).to_owned())
-                .collect::<Vec<_>>();
-            let num_cpus = std::thread::available_parallelism()
-                .ok()
-                .map(|x| x.get() as u64);
-
-            let unit_data = report::to_unit_data(&self.unit_times, &self.unit_to_index);
-            let concurrency = report::compute_concurrency(&unit_data);
 
             let run_id = build_runner.bcx.logger.run_id();
             let ctx = prepare_context_from_iter(logs.into_iter(), run_id)?;

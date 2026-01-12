@@ -160,9 +160,9 @@ pub fn compile_ws<'a>(
     exec: &Arc<dyn Executor>,
 ) -> CargoResult<Compilation<'a>> {
     let interner = UnitInterner::new();
-    let logger = BuildLogger::maybe_new(ws)?;
+    let logger = BuildLogger::new(ws, &options.build_config)?;
 
-    if let Some(ref logger) = logger {
+    if logger.is_enabled() {
         let rustc = ws.gctx().load_global_rustc(Some(ws))?;
         let num_cpus = std::thread::available_parallelism()
             .ok()
@@ -180,7 +180,7 @@ pub fn compile_ws<'a>(
         });
     }
 
-    let bcx = create_bcx(ws, options, &interner, logger.as_ref())?;
+    let bcx = create_bcx(ws, options, &interner, &logger)?;
 
     if options.build_config.unit_graph {
         unit_graph::emit_serialized_unit_graph(&bcx.roots, &bcx.unit_graph, ws.gctx())?;
@@ -239,7 +239,7 @@ pub fn create_bcx<'a, 'gctx>(
     ws: &'a Workspace<'gctx>,
     options: &'a CompileOptions,
     interner: &'a UnitInterner,
-    logger: Option<&'a BuildLogger>,
+    logger: &'a BuildLogger,
 ) -> CargoResult<BuildContext<'a, 'gctx>> {
     let CompileOptions {
         ref build_config,
@@ -307,10 +307,11 @@ pub fn create_bcx<'a, 'gctx>(
     };
     let dry_run = false;
 
-    if let Some(logger) = logger {
+    if logger.is_enabled() {
         let elapsed = ws.gctx().creation_time().elapsed().as_secs_f64();
         logger.log(LogMessage::ResolutionStarted { elapsed });
     }
+
     let resolve = ops::resolve_ws_with_opts(
         ws,
         &mut target_data,
@@ -328,7 +329,7 @@ pub fn create_bcx<'a, 'gctx>(
         specs_and_features,
     } = resolve;
 
-    if let Some(logger) = logger {
+    if logger.is_enabled() {
         let elapsed = ws.gctx().creation_time().elapsed().as_secs_f64();
         logger.log(LogMessage::ResolutionFinished { elapsed });
     }
@@ -413,7 +414,7 @@ pub fn create_bcx<'a, 'gctx>(
     let mut unit_graph = HashMap::new();
     let mut scrape_units = Vec::new();
 
-    if let Some(logger) = logger {
+    if logger.is_enabled() {
         let elapsed = ws.gctx().creation_time().elapsed().as_secs_f64();
         logger.log(LogMessage::UnitGraphStarted { elapsed });
     }
@@ -530,10 +531,10 @@ pub fn create_bcx<'a, 'gctx>(
         .enumerate()
         .map(|(i, &unit)| (unit.clone(), UnitIndex(i as u64)))
         .collect();
-    if let Some(logger) = logger {
-        let root_unit_indexes: HashSet<_> =
-            root_units.iter().map(|unit| unit_to_index[&unit]).collect();
+    let root_unit_indexes: HashSet<_> =
+        root_units.iter().map(|unit| unit_to_index[&unit]).collect();
 
+    if logger.is_enabled() {
         for (index, unit) in units.into_iter().enumerate() {
             let index = UnitIndex(index as u64);
             let dependencies = unit_graph

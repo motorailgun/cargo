@@ -56,7 +56,7 @@ pub struct BuildContext<'a, 'gctx> {
     pub gctx: &'gctx GlobalContext,
 
     /// Build logger for `-Zbuild-analysis`.
-    pub logger: Option<&'a BuildLogger>,
+    pub logger: &'a BuildLogger,
 
     /// This contains a collection of compiler flags presets.
     pub profiles: Profiles,
@@ -94,7 +94,7 @@ pub struct BuildContext<'a, 'gctx> {
 impl<'a, 'gctx> BuildContext<'a, 'gctx> {
     pub fn new(
         ws: &'a Workspace<'gctx>,
-        logger: Option<&'a BuildLogger>,
+        logger: &'a BuildLogger,
         packages: PackageSet<'gctx>,
         build_config: &'a BuildConfig,
         profiles: Profiles,

@@ -1,11 +1,11 @@
 //! Build analysis logging infrastructure.
 
+use std::cell::RefCell;
 use std::hash::Hash;
 use std::io::{BufWriter, Write};
 use std::mem::ManuallyDrop;
 use std::path::Path;
-use std::sync::mpsc::Sender;
-use std::sync::{Mutex, mpsc};
+use std::sync::mpsc::{self, Sender};
 use std::thread::JoinHandle;
 
 use anyhow::Context as _;
@@ -83,14 +83,14 @@ impl Drop for FileLogger {
 // for legacy `cargo build --timings` flag
 struct InMemoryLogger {
     // using mutex to hide mutability
-    logs: Mutex<Vec<LogMessage>>,
+    logs: RefCell<Vec<LogMessage>>,
 }
 
 impl InMemoryLogger {
     fn maybe_new(options: &BuildConfig) -> Option<Self> {
         if options.timing_report {
             Some(Self {
-                logs: Mutex::new(Vec::new()),
+                logs: RefCell::new(Vec::new()),
             })
         } else {
             None
@@ -136,8 +136,8 @@ impl BuildLogger {
     /// Logs a message.
     pub fn log(&self, msg: LogMessage) {
         if let Some(ref logger) = self.in_memory_logger {
-            let mut locked = logger.logs.lock().expect("in-memory logger is poisoned");
-            locked.push(msg.clone());
+            let mut borrowed = logger.logs.try_borrow_mut().expect("Unable to get mutable reference to in-memory logger; please file a bug report");
+            borrowed.push(msg.clone());
         };
 
         if let Some(ref logger) = self.file_logger {
@@ -148,7 +148,7 @@ impl BuildLogger {
     pub fn get_logs(&self) -> Option<Vec<LogMessage>> {
         self.in_memory_logger
             .as_ref()
-            .map(|l| l.logs.lock().expect("in-memory logger is poisoned").clone())
+            .map(|l| l.logs.try_borrow().expect("Unable to get mutable reference to in-memory logger; please file a bug report").clone())
     }
 }
 

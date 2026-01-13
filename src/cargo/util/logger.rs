@@ -87,7 +87,7 @@ struct InMemoryLogger {
 }
 
 impl InMemoryLogger {
-    fn new(options: &BuildConfig) -> Option<Self> {
+    fn maybe_new(options: &BuildConfig) -> Option<Self> {
         if options.timing_report {
             Some(Self {
                 logs: Mutex::new(Vec::new()),
@@ -107,16 +107,20 @@ pub struct BuildLogger {
 }
 
 impl BuildLogger {
-    pub fn new(ws: &Workspace<'_>, options: &BuildConfig) -> CargoResult<Self> {
+    pub fn maybe_new(ws: &Workspace<'_>, options: &BuildConfig) -> CargoResult<Option<Self>> {
         let run_id = Self::generate_run_id(ws);
         let file_logger = FileLogger::maybe_new(ws, &run_id)?;
-        let in_memory_logger = InMemoryLogger::new(options);
+        let in_memory_logger = InMemoryLogger::maybe_new(options);
 
-        Ok(Self {
+        if file_logger.is_none() && in_memory_logger.is_none() {
+            return Ok(None);
+        }
+
+        Ok(Some(Self {
             run_id,
             file_logger,
             in_memory_logger,
-        })
+        }))
     }
 
     /// Generates a unique run ID.
@@ -139,11 +143,6 @@ impl BuildLogger {
         if let Some(ref logger) = self.file_logger {
             let _ = logger.tx.send(msg);
         };
-    }
-
-    // check whether log output is enabled
-    pub fn is_enabled(&self) -> bool {
-        self.file_logger.is_some() || self.in_memory_logger.is_some()
     }
 
     pub fn get_logs(&self) -> Option<Vec<LogMessage>> {

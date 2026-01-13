@@ -88,7 +88,7 @@ pub fn report_timings(
                 None
             }
         });
-    let ctx = prepare_context_from_iter(iter, &run_id)
+    let ctx = prepare_context(iter, &run_id)
         .with_context(|| format!("failed to analyze log at `{}`", log.display()))?;
 
     // If we are in a workspace,
@@ -130,11 +130,10 @@ pub fn report_timings(
     Ok(())
 }
 
-// FIXME: simply the types here once `cargo build --timings` support is dropped
-pub(crate) fn prepare_context_from_iter<T: Iterator<Item = LogMessage>>(
-    log: T,
-    run_id: &RunId,
-) -> CargoResult<RenderContext<'static>> {
+pub(crate) fn prepare_context<I>(log: I, run_id: &RunId) -> CargoResult<RenderContext<'static>>
+where
+    I: Iterator<Item = LogMessage>,
+{
     let mut ctx = RenderContext {
         start_str: run_id.timestamp().to_string(),
         root_units: Default::default(),

@@ -12,7 +12,7 @@ use crate::core::PackageId;
 use crate::core::compiler::BuildContext;
 use crate::core::compiler::BuildRunner;
 use crate::core::compiler::job_queue::JobId;
-use crate::ops::cargo_report::timings::prepare_context_from_iter;
+use crate::ops::cargo_report::timings::prepare_context;
 use crate::util::cpu::State;
 use crate::util::log_message::LogMessage;
 use crate::util::style;
@@ -106,7 +106,7 @@ pub struct UnitData {
 impl<'gctx> Timings<'gctx> {
     pub fn new(bcx: &BuildContext<'_, 'gctx>, root_units: &[Unit]) -> Timings<'gctx> {
         let start = bcx.gctx.creation_time();
-        let enabled = bcx.logger.is_enabled();
+        let enabled = bcx.logger.is_some();
 
         if !enabled {
             return Timings {
@@ -160,9 +160,9 @@ impl<'gctx> Timings<'gctx> {
 
     /// Mark that a unit has started running.
     pub fn unit_start(&mut self, build_runner: &BuildRunner<'_, '_>, id: JobId, unit: Unit) {
-        if !self.enabled {
+        let Some(logger) = build_runner.bcx.logger else {
             return;
-        }
+        };
         let mut target = if unit.target.is_lib()
             && matches!(unit.mode, CompileMode::Build | CompileMode::Check { .. })
         {
@@ -190,7 +190,7 @@ impl<'gctx> Timings<'gctx> {
             unblocked_units: Vec::new(),
             unblocked_rmeta_units: Vec::new(),
         };
-        build_runner.bcx.logger.log(LogMessage::UnitStarted {
+        logger.log(LogMessage::UnitStarted {
             index: self.unit_to_index[&unit_time.unit],
             elapsed: start,
         });
@@ -204,9 +204,9 @@ impl<'gctx> Timings<'gctx> {
         id: JobId,
         unblocked: Vec<&Unit>,
     ) {
-        if !self.enabled {
+        let Some(logger) = build_runner.bcx.logger else {
             return;
-        }
+        };
         // `id` may not always be active. "fresh" units unconditionally
         // generate `Message::Finish`, but this active map only tracks dirty
         // units.
@@ -221,7 +221,7 @@ impl<'gctx> Timings<'gctx> {
             .extend(unblocked.iter().cloned().cloned());
 
         let unblocked = unblocked.iter().map(|u| self.unit_to_index[u]).collect();
-        build_runner.bcx.logger.log(LogMessage::UnitRmetaFinished {
+        logger.log(LogMessage::UnitRmetaFinished {
             index: self.unit_to_index[&unit_time.unit],
             elapsed,
             unblocked,
@@ -235,9 +235,9 @@ impl<'gctx> Timings<'gctx> {
         id: JobId,
         unblocked: Vec<&Unit>,
     ) {
-        if !self.enabled {
+        let Some(logger) = build_runner.bcx.logger else {
             return;
-        }
+        };
         // See note above in `unit_rmeta_finished`, this may not always be active.
         let Some(mut unit_time) = self.active.remove(&id) else {
             return;
@@ -250,7 +250,7 @@ impl<'gctx> Timings<'gctx> {
             .extend(unblocked.iter().cloned().cloned());
 
         let unblocked = unblocked.iter().map(|u| self.unit_to_index[u]).collect();
-        build_runner.bcx.logger.log(LogMessage::UnitFinished {
+        logger.log(LogMessage::UnitFinished {
             index: self.unit_to_index[&unit_time.unit],
             elapsed,
             unblocked,
@@ -265,9 +265,9 @@ impl<'gctx> Timings<'gctx> {
         id: JobId,
         section_timing: &SectionTiming,
     ) {
-        if !self.enabled {
+        let Some(logger) = build_runner.bcx.logger else {
             return;
-        }
+        };
         let Some(unit_time) = self.active.get_mut(&id) else {
             return;
         };
@@ -275,7 +275,7 @@ impl<'gctx> Timings<'gctx> {
 
         let index = self.unit_to_index[&unit_time.unit];
         let section = section_timing.name.clone();
-        build_runner.bcx.logger.log(match section_timing.event {
+        logger.log(match section_timing.event {
             SectionTimingEvent::Start => LogMessage::UnitSectionStarted {
                 index,
                 elapsed,
@@ -328,7 +328,8 @@ impl<'gctx> Timings<'gctx> {
 
     /// Call this when all units are finished.
     pub fn finished(&mut self, build_runner: &BuildRunner<'_, '_>) -> CargoResult<()> {
-        if let Some(logs) = build_runner.bcx.logger.get_logs() {
+        if let Some(logger) = build_runner.bcx.logger
+            && let Some(logs) = logger.get_logs() {
             let timestamp = self.start_str.replace(&['-', ':'][..], "");
             let timings_path = build_runner
                 .files()
@@ -338,8 +339,8 @@ impl<'gctx> Timings<'gctx> {
             let filename = timings_path.join(format!("cargo-timing-{}.html", timestamp));
             let mut f = BufWriter::new(paths::create(&filename)?);
 
-            let run_id = build_runner.bcx.logger.run_id();
-            let ctx = prepare_context_from_iter(logs.into_iter(), run_id)?;
+            let run_id = logger.run_id();
+            let ctx = prepare_context(logs.into_iter(), run_id)?;
             report::write_html(ctx, &mut f)?;
 
             let unstamped_filename = timings_path.join("cargo-timing.html");

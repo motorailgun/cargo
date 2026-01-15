@@ -974,13 +974,11 @@ impl<'gctx> DrainState<'gctx> {
 
         match is_fresh {
             true => {
-                self.timings.add_fresh();
                 // Running a fresh job on the same thread is often much faster than spawning a new
                 // thread to run the job.
                 doit(Some(&self.diag_dedupe));
             }
             false => {
-                self.timings.add_dirty();
                 scope.spawn(move || doit(None));
             }
         }

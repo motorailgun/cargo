@@ -36,18 +36,10 @@ pub struct Timings<'gctx> {
     enabled: bool,
     /// When Cargo started.
     start: Instant,
-    /// A rendered string of when compilation started.
-    start_str: String,
     /// A summary of the root units.
     ///
-    /// Total number of fresh units.
-    total_fresh: u32,
-    /// Total number of dirty units.
-    total_dirty: u32,
     /// A map from unit to index.
     unit_to_index: HashMap<Unit, UnitIndex>,
-    /// Time tracking for each individual unit.
-    unit_times: Vec<UnitTime>,
     /// Units that are in the process of being built.
     /// When they finished, they are moved to `unit_times`.
     active: HashMap<JobId, UnitTime>,
@@ -113,11 +105,7 @@ impl<'gctx> Timings<'gctx> {
                 gctx: bcx.gctx,
                 enabled,
                 start,
-                start_str: String::new(),
-                total_fresh: 0,
-                total_dirty: 0,
                 unit_to_index: HashMap::new(),
-                unit_times: Vec::new(),
                 active: HashMap::new(),
                 last_cpu_state: None,
                 last_cpu_recording: Instant::now(),
@@ -133,7 +121,6 @@ impl<'gctx> Timings<'gctx> {
                 .or_default()
                 .push(target_desc);
         }
-        let start_str = jiff::Timestamp::now().to_string();
         let last_cpu_state = match State::current() {
             Ok(state) => Some(state),
             Err(e) => {
@@ -146,11 +133,7 @@ impl<'gctx> Timings<'gctx> {
             gctx: bcx.gctx,
             enabled,
             start,
-            start_str,
-            total_fresh: 0,
-            total_dirty: 0,
             unit_to_index: bcx.unit_to_index.clone(),
-            unit_times: Vec::new(),
             active: HashMap::new(),
             last_cpu_state,
             last_cpu_recording: Instant::now(),
@@ -255,7 +238,6 @@ impl<'gctx> Timings<'gctx> {
             elapsed,
             unblocked,
         });
-        self.unit_times.push(unit_time);
     }
 
     /// Handle the start/end of a compilation section.
@@ -289,16 +271,6 @@ impl<'gctx> Timings<'gctx> {
         })
     }
 
-    /// Mark that a fresh unit was encountered. (No re-compile needed)
-    pub fn add_fresh(&mut self) {
-        self.total_fresh += 1;
-    }
-
-    /// Mark that a dirty unit was encountered. (Re-compile needed)
-    pub fn add_dirty(&mut self) {
-        self.total_dirty += 1;
-    }
-
     /// Take a sample of CPU usage
     pub fn record_cpu(&mut self) {
         if !self.enabled {
@@ -330,7 +302,7 @@ impl<'gctx> Timings<'gctx> {
     pub fn finished(&mut self, build_runner: &BuildRunner<'_, '_>) -> CargoResult<()> {
         if let Some(logger) = build_runner.bcx.logger
             && let Some(logs) = logger.get_logs() {
-            let timestamp = self.start_str.replace(&['-', ':'][..], "");
+            let timestamp = logger.run_id().timestamp().to_string().replace(&['-', ':'][..], "");
             let timings_path = build_runner
                 .files()
                 .timings_dir()

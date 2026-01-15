@@ -301,8 +301,13 @@ impl<'gctx> Timings<'gctx> {
     /// Call this when all units are finished.
     pub fn finished(&mut self, build_runner: &BuildRunner<'_, '_>) -> CargoResult<()> {
         if let Some(logger) = build_runner.bcx.logger
-            && let Some(logs) = logger.get_logs() {
-            let timestamp = logger.run_id().timestamp().to_string().replace(&['-', ':'][..], "");
+            && let Some(logs) = logger.get_logs()
+        {
+            let timestamp = logger
+                .run_id()
+                .timestamp()
+                .to_string()
+                .replace(&['-', ':'][..], "");
             let timings_path = build_runner
                 .files()
                 .timings_dir()

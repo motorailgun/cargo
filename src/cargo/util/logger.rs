@@ -136,7 +136,9 @@ impl BuildLogger {
     /// Logs a message.
     pub fn log(&self, msg: LogMessage) {
         if let Some(ref logger) = self.in_memory_logger {
-            let mut borrowed = logger.logs.try_borrow_mut().expect("Unable to get a mutable reference to in-memory logger; please file a bug report");
+            let mut borrowed = logger.logs.try_borrow_mut().expect(
+                "Unable to get a mutable reference to in-memory logger; please file a bug report",
+            );
             borrowed.push(msg.clone());
         };
 
@@ -146,9 +148,12 @@ impl BuildLogger {
     }
 
     pub fn get_logs(&self) -> Option<Vec<LogMessage>> {
-        self.in_memory_logger
-            .as_ref()
-            .map(|l| l.logs.try_borrow().expect("Unable to get a reference to in-memory logger; please file a bug report").clone())
+        self.in_memory_logger.as_ref().map(|l| {
+            l.logs
+                .try_borrow()
+                .expect("Unable to get a reference to in-memory logger; please file a bug report")
+                .clone()
+        })
     }
 }
 

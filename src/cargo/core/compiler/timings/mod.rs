@@ -39,7 +39,7 @@ pub struct Timings<'gctx> {
     unit_to_index: HashMap<Unit, UnitIndex>,
     /// Units that are in the process of being built.
     /// When they finished, they are moved to `unit_times`.
-    active: HashMap<JobId, UnitTime>,
+    active: HashMap<JobId, Unit>,
     /// Last recorded state of the system's CPUs and when it happened
     last_cpu_state: Option<State>,
     last_cpu_recording: Instant,
@@ -56,22 +56,6 @@ pub struct CompilationSection {
     pub start: f64,
     /// End of the section, as an offset in seconds from `UnitTime::start`.
     pub end: Option<f64>,
-}
-
-/// Tracking information for an individual unit.
-struct UnitTime {
-    unit: Unit,
-    /// The time when this unit started as an offset in seconds from `Timings::start`.
-    start: f64,
-    /// Total time to build this unit in seconds.
-    duration: f64,
-    /// The time when the `.rmeta` file was generated, an offset in seconds
-    /// from `start`.
-    rmeta_time: Option<f64>,
-    /// Reverse deps that are unblocked and ready to run after this unit finishes.
-    unblocked_units: Vec<Unit>,
-    /// Same as `unblocked_units`, but unblocked by rmeta.
-    unblocked_rmeta_units: Vec<Unit>,
 }
 
 /// Data for a single compilation unit, prepared for serialization to JSON.
@@ -151,19 +135,12 @@ impl<'gctx> Timings<'gctx> {
             CompileMode::RunCustomBuild => target.push_str(" (run)"),
         }
         let start = self.start.elapsed().as_secs_f64();
-        let unit_time = UnitTime {
-            unit,
-            start,
-            duration: 0.0,
-            rmeta_time: None,
-            unblocked_units: Vec::new(),
-            unblocked_rmeta_units: Vec::new(),
-        };
         logger.log(LogMessage::UnitStarted {
-            index: self.unit_to_index[&unit_time.unit],
+            index: self.unit_to_index[&unit],
             elapsed: start,
         });
-        assert!(self.active.insert(id, unit_time).is_none());
+
+        assert!(self.active.insert(id, unit).is_none());
     }
 
     /// Mark that the `.rmeta` file as generated.
@@ -179,19 +156,14 @@ impl<'gctx> Timings<'gctx> {
         // `id` may not always be active. "fresh" units unconditionally
         // generate `Message::Finish`, but this active map only tracks dirty
         // units.
-        let Some(unit_time) = self.active.get_mut(&id) else {
+        let Some(unit) = self.active.get(&id) else {
             return;
         };
         let elapsed = self.start.elapsed().as_secs_f64();
-        unit_time.rmeta_time = Some(elapsed - unit_time.start);
-        assert!(unit_time.unblocked_rmeta_units.is_empty());
-        unit_time
-            .unblocked_rmeta_units
-            .extend(unblocked.iter().cloned().cloned());
 
         let unblocked = unblocked.iter().map(|u| self.unit_to_index[u]).collect();
         logger.log(LogMessage::UnitRmetaFinished {
-            index: self.unit_to_index[&unit_time.unit],
+            index: self.unit_to_index[unit],
             elapsed,
             unblocked,
         });
@@ -208,19 +180,14 @@ impl<'gctx> Timings<'gctx> {
             return;
         };
         // See note above in `unit_rmeta_finished`, this may not always be active.
-        let Some(mut unit_time) = self.active.remove(&id) else {
+        let Some(unit) = self.active.remove(&id) else {
             return;
         };
         let elapsed = self.start.elapsed().as_secs_f64();
-        unit_time.duration = elapsed - unit_time.start;
-        assert!(unit_time.unblocked_units.is_empty());
-        unit_time
-            .unblocked_units
-            .extend(unblocked.iter().cloned().cloned());
 
         let unblocked = unblocked.iter().map(|u| self.unit_to_index[u]).collect();
         logger.log(LogMessage::UnitFinished {
-            index: self.unit_to_index[&unit_time.unit],
+            index: self.unit_to_index[&unit],
             elapsed,
             unblocked,
         });
@@ -236,12 +203,12 @@ impl<'gctx> Timings<'gctx> {
         let Some(logger) = build_runner.bcx.logger else {
             return;
         };
-        let Some(unit_time) = self.active.get_mut(&id) else {
+        let Some(unit) = self.active.get(&id) else {
             return;
         };
         let elapsed = self.start.elapsed().as_secs_f64();
 
-        let index = self.unit_to_index[&unit_time.unit];
+        let index = self.unit_to_index[&unit];
         let section = section_timing.name.clone();
         logger.log(match section_timing.event {
             SectionTimingEvent::Start => LogMessage::UnitSectionStarted {

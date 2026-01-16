@@ -8,7 +8,6 @@ pub mod report;
 use super::CompileMode;
 use super::Unit;
 use super::UnitIndex;
-use crate::core::PackageId;
 use crate::core::compiler::BuildContext;
 use crate::core::compiler::BuildRunner;
 use crate::core::compiler::job_queue::JobId;
@@ -32,8 +31,6 @@ use std::time::{Duration, Instant};
 /// [`JobQueue`]: super::JobQueue
 pub struct Timings<'gctx> {
     gctx: &'gctx GlobalContext,
-    /// Whether or not timings should be captured.
-    enabled: bool,
     /// When Cargo started.
     start: Instant,
     /// A summary of the root units.
@@ -96,14 +93,12 @@ pub struct UnitData {
 }
 
 impl<'gctx> Timings<'gctx> {
-    pub fn new(bcx: &BuildContext<'_, 'gctx>, root_units: &[Unit]) -> Timings<'gctx> {
+    pub fn new(bcx: &BuildContext<'_, 'gctx>) -> Timings<'gctx> {
         let start = bcx.gctx.creation_time();
-        let enabled = bcx.logger.is_some();
 
-        if !enabled {
+        if bcx.logger.is_none() {
             return Timings {
                 gctx: bcx.gctx,
-                enabled,
                 start,
                 unit_to_index: HashMap::new(),
                 active: HashMap::new(),
@@ -113,14 +108,6 @@ impl<'gctx> Timings<'gctx> {
             };
         }
 
-        let mut root_map: HashMap<PackageId, Vec<String>> = HashMap::new();
-        for unit in root_units {
-            let target_desc = unit.target.description_named();
-            root_map
-                .entry(unit.pkg.package_id())
-                .or_default()
-                .push(target_desc);
-        }
         let last_cpu_state = match State::current() {
             Ok(state) => Some(state),
             Err(e) => {
@@ -131,7 +118,6 @@ impl<'gctx> Timings<'gctx> {
 
         Timings {
             gctx: bcx.gctx,
-            enabled,
             start,
             unit_to_index: bcx.unit_to_index.clone(),
             active: HashMap::new(),
@@ -272,8 +258,8 @@ impl<'gctx> Timings<'gctx> {
     }
 
     /// Take a sample of CPU usage
-    pub fn record_cpu(&mut self) {
-        if !self.enabled {
+    pub fn record_cpu(&mut self, build_runner: &BuildRunner<'_, '_>) {
+        if build_runner.bcx.logger.is_none() {
             return;
         }
         let Some(prev) = &mut self.last_cpu_state else {
@@ -299,25 +285,26 @@ impl<'gctx> Timings<'gctx> {
     }
 
     /// Call this when all units are finished.
-    pub fn finished(&mut self, build_runner: &BuildRunner<'_, '_>) -> CargoResult<()> {
+    pub fn finished(
+        &mut self,
+        build_runner: &BuildRunner<'_, '_>,
+        error: &Option<anyhow::Error>,
+    ) -> CargoResult<()> {
         if let Some(logger) = build_runner.bcx.logger
             && let Some(logs) = logger.get_logs()
         {
-            let timestamp = logger
-                .run_id()
-                .timestamp()
-                .to_string()
-                .replace(&['-', ':'][..], "");
             let timings_path = build_runner
                 .files()
                 .timings_dir()
                 .expect("artifact-dir was not locked");
             paths::create_dir_all(&timings_path)?;
-            let filename = timings_path.join(format!("cargo-timing-{}.html", timestamp));
+            let run_id = logger.run_id();
+            let filename = timings_path.join(format!("cargo-timing-{run_id}.html"));
             let mut f = BufWriter::new(paths::create(&filename)?);
 
-            let run_id = logger.run_id();
-            let ctx = prepare_context(logs.into_iter(), run_id)?;
+            let mut ctx = prepare_context(logs.into_iter(), run_id)?;
+            ctx.error = error;
+            ctx.cpu_usage = &self.cpu_usage;
             report::write_html(ctx, &mut f)?;
 
             let unstamped_filename = timings_path.join("cargo-timing.html");

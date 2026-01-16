@@ -130,7 +130,7 @@ pub fn report_timings(
     Ok(())
 }
 
-pub(crate) fn prepare_context<I>(log: I, run_id: &RunId) -> CargoResult<RenderContext<'static>>
+pub(crate) fn prepare_context<I>(log: I, run_id: &RunId) -> CargoResult<RenderContext<'_>>
 where
     I: Iterator<Item = LogMessage>,
 {

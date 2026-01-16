@@ -24,7 +24,7 @@ struct FileLogger {
 }
 
 impl FileLogger {
-    // create a logger if `-Zbuild-analysis` is enabled
+    /// Creates a logger if `-Zbuild-analysis` is enabled
     fn maybe_new(ws: &Workspace<'_>, run_id: &RunId) -> CargoResult<Option<FileLogger>> {
         let analysis = ws.gctx().build_config()?.analysis.as_ref();
         match (analysis, ws.gctx().cli_unstable().build_analysis) {
@@ -80,7 +80,7 @@ impl Drop for FileLogger {
     }
 }
 
-// for legacy `cargo build --timings` flag
+/// For legacy `cargo build --timings` flag
 struct InMemoryLogger {
     // using mutex to hide mutability
     logs: RefCell<Vec<LogMessage>>,
@@ -99,7 +99,6 @@ impl InMemoryLogger {
 }
 
 /// Logger for `-Zbuild-analysis`.
-// fixme: simplify this struct once `cargo build --timings` support dropped
 pub struct BuildLogger {
     run_id: RunId,
     file_logger: Option<FileLogger>,

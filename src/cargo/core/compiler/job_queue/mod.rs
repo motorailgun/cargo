@@ -391,7 +391,7 @@ impl<'gctx> JobQueue<'gctx> {
         JobQueue {
             queue: DependencyQueue::new(),
             counts: HashMap::new(),
-            timings: Timings::new(bcx, &bcx.roots),
+            timings: Timings::new(bcx),
         }
     }
 
@@ -735,7 +735,7 @@ impl<'gctx> DrainState<'gctx> {
     }
 
     // This will also tick the progress bar as appropriate
-    fn wait_for_events(&mut self) -> Vec<Message> {
+    fn wait_for_events(&mut self, build_runner: &BuildRunner<'_, '_>) -> Vec<Message> {
         // Drain all events at once to avoid displaying the progress bar
         // unnecessarily. If there's no events we actually block waiting for
         // an event, but we keep a "heartbeat" going to allow `record_cpu`
@@ -745,7 +745,7 @@ impl<'gctx> DrainState<'gctx> {
         let mut events = self.messages.try_pop_all();
         if events.is_empty() {
             loop {
-                self.tick_progress();
+                self.tick_progress(build_runner);
                 self.tokens.truncate(self.active.len() - 1);
                 match self.messages.pop(Duration::from_millis(500)) {
                     Some(message) => {
@@ -805,7 +805,7 @@ impl<'gctx> DrainState<'gctx> {
             // jobserver interface is architected we may acquire a token that we
             // don't actually use, and if this happens just relinquish it back
             // to the jobserver itself.
-            for event in self.wait_for_events() {
+            for event in self.wait_for_events(build_runner) {
                 if let Err(event_err) = self.handle_event(build_runner, event) {
                     self.handle_error(&mut build_runner.bcx.gctx.shell(), &mut errors, event_err);
                 }
@@ -834,7 +834,7 @@ impl<'gctx> DrainState<'gctx> {
         let time_elapsed = util::elapsed(build_runner.bcx.gctx.creation_time().elapsed());
         if let Err(e) = self
             .timings
-            .finished(build_runner)
+            .finished(build_runner, &errors.to_error())
             .context("failed to render timing report")
         {
             self.handle_error(&mut build_runner.bcx.gctx.shell(), &mut errors, e);
@@ -897,11 +897,11 @@ impl<'gctx> DrainState<'gctx> {
     // This also records CPU usage and marks concurrency; we roughly want to do
     // this as often as we spin on the events receiver (at least every 500ms or
     // so).
-    fn tick_progress(&mut self) {
+    fn tick_progress(&mut self, build_runner: &BuildRunner<'_, '_>) {
         // Record some timing information if `--timings` is enabled, and
         // this'll end up being a noop if we're not recording this
         // information.
-        self.timings.record_cpu();
+        self.timings.record_cpu(build_runner);
 
         let active_names = self
             .active

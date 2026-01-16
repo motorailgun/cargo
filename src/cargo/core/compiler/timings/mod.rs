@@ -31,6 +31,8 @@ use std::time::{Duration, Instant};
 /// [`JobQueue`]: super::JobQueue
 pub struct Timings<'gctx> {
     gctx: &'gctx GlobalContext,
+    /// Whether or not timings should be captured.
+    enabled: bool,
     /// When Cargo started.
     start: Instant,
     /// A summary of the root units.
@@ -79,10 +81,12 @@ pub struct UnitData {
 impl<'gctx> Timings<'gctx> {
     pub fn new(bcx: &BuildContext<'_, 'gctx>) -> Timings<'gctx> {
         let start = bcx.gctx.creation_time();
+        let enabled = bcx.logger.is_some();
 
-        if bcx.logger.is_none() {
+        if !enabled {
             return Timings {
                 gctx: bcx.gctx,
+                enabled,
                 start,
                 unit_to_index: HashMap::new(),
                 active: HashMap::new(),
@@ -102,6 +106,7 @@ impl<'gctx> Timings<'gctx> {
 
         Timings {
             gctx: bcx.gctx,
+            enabled,
             start,
             unit_to_index: bcx.unit_to_index.clone(),
             active: HashMap::new(),
@@ -225,8 +230,8 @@ impl<'gctx> Timings<'gctx> {
     }
 
     /// Take a sample of CPU usage
-    pub fn record_cpu(&mut self, build_runner: &BuildRunner<'_, '_>) {
-        if build_runner.bcx.logger.is_none() {
+    pub fn record_cpu(&mut self) {
+        if !self.enabled {
             return;
         }
         let Some(prev) = &mut self.last_cpu_state else {

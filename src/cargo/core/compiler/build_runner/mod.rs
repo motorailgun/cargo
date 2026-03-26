@@ -798,20 +798,16 @@ impl<'a, 'gctx> BuildRunner<'a, 'gctx> {
     /// The final output is produced only after root unit is complete
     fn uplift_rustdoc(&self, unit: &Unit) -> CargoResult<()> {
         let doc_dir = self.files().output_dir(unit);
+        let doc_json_dir = self.files().out_dir_new_layout(unit);
         let crate_name = unit.target.crate_name();
-        let crate_hash_suffix = self.files().metadata(unit).unit_id();
-        let full_name = format!("{crate_name}-{crate_hash_suffix}");
+        let filename = format!("{crate_name}.json");
         let is_json_output = is_json_output(self);
 
         if is_json_output {
-            let src_path = doc_dir
-                .join("json")
-                .join(&full_name)
-                .join(format!("{crate_name}.json"));
-            let filename = format!("{crate_name}.json");
-
+            let src_path = doc_json_dir.join(&filename);
             copy(src_path, doc_dir.join(&filename))?;
         }
+    
         Ok(())
     }
 }

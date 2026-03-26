@@ -869,19 +869,13 @@ fn prepare_rustdoc(build_runner: &BuildRunner<'_, '_>, unit: &Unit) -> CargoResu
 
     unit.kind.add_target_arg(&mut rustdoc);
 
-    let doc_dir_base = build_runner.files().output_dir(unit);
     let doc_dir = if is_json_output(build_runner) {
-        // Set hash-suffixed output path for JSON outputs
-        // because rustdoc's -o option controls output directory, not the filename
+        // Always use new layout for '--output-format=json'.
         // In fix for https://github.com/rust-lang/cargo/issues/16291
 
-        let crate_name = unit.target.crate_name();
-        let suffix = build_runner.files().metadata(unit).unit_id();
-        doc_dir_base
-            .join("json")
-            .join(format!("{crate_name}-{suffix}"))
+        build_runner.files().out_dir_new_layout(unit)
     } else {
-        doc_dir_base
+        build_runner.files().output_dir(unit)
     };
 
     rustdoc.arg("-o").arg(&doc_dir);
@@ -987,9 +981,9 @@ fn rustdoc(build_runner: &mut BuildRunner<'_, '_>, unit: &Unit) -> CargoResult<W
     let mut rustdoc = prepare_rustdoc(build_runner, unit)?;
 
     let crate_name = unit.target.crate_name();
-    let crate_hash_suffix = build_runner.files().metadata(unit).unit_id();
     let is_json_output = is_json_output(build_runner);
     let doc_dir = build_runner.files().output_dir(unit);
+    let new_doc_dir = build_runner.files().out_dir_new_layout(unit);
     // Create the documentation directory ahead of time as rustdoc currently has
     // a bug where concurrent invocations will race to create this directory if
     // it doesn't already exist.
@@ -1073,8 +1067,7 @@ fn rustdoc(build_runner: &mut BuildRunner<'_, '_>, unit: &Unit) -> CargoResult<W
         }
 
         let crate_dir = if is_json_output {
-            let name = format!("{crate_name}-{crate_hash_suffix}");
-            doc_dir.join("json").join(name)
+            new_doc_dir
         } else {
             doc_dir.join(&crate_name)
         };

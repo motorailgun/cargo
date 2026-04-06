@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use crate::core::PackageId;
 use crate::core::compiler::compilation::{self, UnitOutput};
 use crate::core::compiler::locking::LockManager;
-use crate::core::compiler::rustdoc::is_json_output;
+use crate::core::compiler::rustdoc::is_rustdoc_json_output;
 use crate::core::compiler::{self, Unit, UserIntent, artifact};
 use crate::util::cache_lock::CacheLockMode;
 use crate::util::errors::CargoResult;
@@ -237,7 +237,7 @@ impl<'a, 'gctx> BuildRunner<'a, 'gctx> {
             self.collect_tests_and_executables(unit)?;
 
             // Uplift rustdoc
-            if unit.mode.is_doc() {
+            if is_rustdoc_json_output(&self) {
                 self.uplift_rustdoc(unit)?;
             }
 
@@ -804,12 +804,9 @@ impl<'a, 'gctx> BuildRunner<'a, 'gctx> {
         let doc_json_dir = self.files().out_dir_new_layout(unit);
         let crate_name = unit.target.crate_name();
         let filename = format!("{crate_name}.json");
-        let is_json_output = is_json_output(self);
 
-        if is_json_output {
-            let src_path = doc_json_dir.join(&filename);
-            copy(src_path, doc_dir.join(&filename))?;
-        }
+        let src_path = doc_json_dir.join(&filename);
+        copy(src_path, doc_dir.join(&filename))?;
 
         Ok(())
     }

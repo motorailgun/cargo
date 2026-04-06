@@ -243,7 +243,7 @@ pub fn add_root_urls(
 }
 
 /// Checks whether JSON output should be enabled for rusdoc invocation
-pub fn is_json_output(build_runner: &BuildRunner<'_, '_>) -> bool {
+pub fn is_rustdoc_json_output(build_runner: &BuildRunner<'_, '_>) -> bool {
     build_runner.bcx.build_config.intent.wants_doc_json_output()
         && build_runner.bcx.gctx.cli_unstable().unstable_options
 }
@@ -256,7 +256,7 @@ pub fn add_output_format(
     build_runner: &BuildRunner<'_, '_>,
     rustdoc: &mut ProcessBuilder,
 ) -> CargoResult<()> {
-    if is_json_output(build_runner) {
+    if is_rustdoc_json_output(build_runner) {
         rustdoc.arg("-Zunstable-options");
         rustdoc.arg("--output-format=json");
     } else {
